@@ -4,7 +4,6 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
-import chalk from 'chalk';
 import fs from 'fs';
 import { ConfigT } from 'metro-config';
 import { Resolution, ResolutionContext } from 'metro-resolver';
@@ -28,7 +27,6 @@ import { FileNotifier } from '../../../utils/FileNotifier';
 import { env } from '../../../utils/env';
 import { installExitHooks } from '../../../utils/exit';
 import { isInteractive } from '../../../utils/interactive';
-import { learnMore } from '../../../utils/link';
 import { loadTsConfigPathsAsync, TsConfigPaths } from '../../../utils/tsconfig/loadTsConfigPaths';
 import { resolveWithTsConfigPaths } from '../../../utils/tsconfig/resolveWithTsConfigPaths';
 import { WebSupportProjectPrerequisite } from '../../doctor/web/WebSupportProjectPrerequisite';
@@ -197,6 +195,8 @@ export function withExtendedResolver(
   }
 
   let nodejsSourceExtensions: string[] | null = null;
+
+  const shimsFolder = path.join(require.resolve('@expo/cli/package.json'), '..', 'static/shims');
 
   return withMetroResolvers(config, projectRoot, [
     // Add a resolver to alias the web asset resolver.
@@ -374,6 +374,18 @@ export function withExtendedResolver(
         ) {
           // @ts-expect-error: `readonly` for some reason.
           result.filePath = reactNativeWebAppContainer;
+        } else if (platform === 'web' && result.filePath.includes('node_modules')) {
+          // Replace with static shims
+
+          const normalName = normalizeSlashes(result.filePath)
+            // Drop everything up until the `node_modules` folder.
+            .replace(/.*node_modules\//, '');
+
+          const shimPath = path.join(shimsFolder, normalName);
+          if (fs.existsSync(shimPath)) {
+            // @ts-expect-error: `readonly` for some reason.
+            result.filePath = shimPath;
+          }
         }
       }
       return result;
@@ -455,10 +467,6 @@ export async function withMetroMultiPlatformAsync(
   let tsconfig: null | TsConfigPaths = null;
 
   if (isTsconfigPathsEnabled) {
-    Log.warn(
-      chalk.yellow`Experimental path aliases feature is enabled. ` +
-        learnMore('https://docs.expo.dev/guides/typescript/#path-aliases')
-    );
     tsconfig = await loadTsConfigPathsAsync(projectRoot);
   }
 
